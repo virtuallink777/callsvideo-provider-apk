@@ -34,6 +34,23 @@ export default function DashboardScreen({
   socket,
 }: DashboardScreenProps) {
   const [profileData, setProfileData] = useState<any>(null);
+  const [answered, setAnswered] = useState(false);
+  const callId = incomingCall?.callSessionId ?? null;
+
+  // Reiniciar cuando la llamada termina
+  useEffect(() => {
+    if (!incomingCall) setAnswered(false);
+  }, [incomingCall]);
+
+  // Vibrar solo mientras la llamada suena y no se ha contestado
+  useEffect(() => {
+    if (callId && !answered) {
+      Vibration.vibrate([500, 200, 500, 200, 500, 200, 500], true);
+    } else {
+      Vibration.cancel();
+    }
+    return () => Vibration.cancel();
+  }, [callId, answered]);
 
   // ═══════════════════════════════════════════════════════════
   // 🔐 PRE-CARGA DE PERMISOS (cámara + micrófono)
@@ -78,15 +95,6 @@ export default function DashboardScreen({
     fetchProfile();
   }, [providerEmail]);
 
-  // Vibrar cuando llega una llamada
-  useEffect(() => {
-    if (incomingCall) {
-      Vibration.vibrate([500, 200, 500, 200, 500, 200, 500], true);
-    } else {
-      Vibration.cancel();
-    }
-  }, [incomingCall]);
-
   const handleAcceptCall = () => {
     stopRingtone(); // 👈 también aquí
     Vibration.cancel();
@@ -102,6 +110,7 @@ export default function DashboardScreen({
       typeCall: incomingCall.typeCall,
     });
     console.log("✅ accept_call emitido");
+    setAnswered(true);
     navigation.navigate("IncomingCall");
   };
 
@@ -169,7 +178,11 @@ export default function DashboardScreen({
       </Text>
 
       {/* MODAL DE LLAMADA ENTRANTE */}
-      <Modal visible={!!incomingCall} transparent animationType="slide">
+      <Modal
+        visible={!!incomingCall && !answered}
+        transparent
+        animationType="slide"
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalIcon}>

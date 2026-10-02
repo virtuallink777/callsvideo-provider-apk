@@ -37,16 +37,13 @@ const ensureCallChannel = async () => {
       await Notifications.deleteNotificationChannelAsync("incoming_calls");
       console.log("🗑️ Canal viejo eliminado");
     }
-    await Notifications.setNotificationChannelAsync("incoming_calls", {
+    await Notifications.setNotificationChannelAsync("incoming_calls_v2", {
       name: "Llamadas Entrantes",
       importance: Notifications.AndroidImportance.MAX,
-      sound: "sound", // ← SIN .mp3 (regla de recursos Android)
+      sound: "call_ring.wav",
       enableVibrate: true,
       vibrationPattern: [0, 500, 200, 500, 200, 500],
-      enableLights: true,
-      lightColor: "#4f8ef7",
       bypassDnd: true,
-      visibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
     console.log("📢 Canal incoming_calls creado con sonido");
@@ -60,6 +57,15 @@ export default function App() {
   const [providerEmail, setProviderEmail] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [incomingCall, setIncomingCall] = useState<any>(null);
+  const [activeSocket, setActiveSocket] = useState<Socket | null>(null);
+
+  const showIncomingCall = (data: any) => {
+    setIncomingCall((prev: any) =>
+      prev?.callSessionId && prev.callSessionId === data?.callSessionId
+        ? { ...prev, ...data }
+        : data,
+    );
+  };
 
   // ✅ Socket vive aquí — persiste en todas las pantallas
   const socketRef = useRef<Socket | null>(null);
@@ -94,11 +100,15 @@ export default function App() {
   }, []);
 
   // 🔕 Si la llamada entrante se limpia por cualquier razón, detener timbre
+
+  const activeCallId = incomingCall?.callSessionId ?? null;
   useEffect(() => {
-    if (!incomingCall) {
+    if (activeCallId) {
+      startRingtone();
+    } else {
       stopRingtone();
     }
-  }, [incomingCall]);
+  }, [activeCallId]);
 
   // ─────────────────────────────────────────────
   // Si el usuario toca la notificación con la app cerrada,
@@ -110,7 +120,7 @@ export default function App() {
       if (response) {
         const data = response.notification.request.content.data;
         if (data?.type === "incoming_call") {
-          setIncomingCall(data);
+          showIncomingCall(data);
         }
       }
     };
@@ -137,6 +147,7 @@ export default function App() {
     });
 
     socketRef.current = socket;
+    setActiveSocket(socket); // 👈 NUEVO
 
     socket.on("connect", () => {
       console.log("✅ Socket conectado en App.tsx:", socket.id);
@@ -151,7 +162,7 @@ export default function App() {
     // ✅ Escuchar llamada entrante aquí — socket siempre activo
     socket.on("incoming_call", (data: any) => {
       console.log("📞 Llamada entrante en App.tsx:", data);
-      setIncomingCall(data);
+      showIncomingCall(data);
       startRingtone(); // 👈 NUEVO
     });
 
@@ -177,6 +188,7 @@ export default function App() {
       socket.disconnect();
       socketRef.current = null;
       socket.off("call_answered_elsewhere"); // 👈 AGREGAR
+      setActiveSocket(null); // 👈 NUEVO
     };
   }, [isLoggedIn, providerEmail]);
 
@@ -229,7 +241,7 @@ export default function App() {
       (notification) => {
         const data = notification.request.content.data;
         if (data?.type === "incoming_call") {
-          setIncomingCall(data);
+          showIncomingCall(data);
         }
       },
     );
@@ -246,7 +258,7 @@ export default function App() {
               callSessionId: data.callSessionId,
             });
           } else {
-            setIncomingCall(data);
+            showIncomingCall(data);
           }
         }
       },
@@ -306,7 +318,7 @@ export default function App() {
                   onClearIncomingCall={() => setIncomingCall(null)}
                   backendUrl={BACKEND_URL}
                   // ✅ Pasamos el socket global a las pantallas
-                  socket={socketRef.current}
+                  socket={activeSocket}
                 />
               )}
             </Stack.Screen>
@@ -319,7 +331,7 @@ export default function App() {
                   backendUrl={BACKEND_URL}
                   onClose={() => setIncomingCall(null)}
                   // ✅ Pasamos el socket global
-                  socket={socketRef.current}
+                  socket={activeSocket}
                   ratePerMinute={incomingCall?.ratePerMinute || 0}
                 />
               )}

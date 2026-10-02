@@ -155,85 +155,97 @@ export default function IncomingCallScreen({
   // ─────────────────────────────────────────────
   // INICIALIZAR WEBRTC
   // ─────────────────────────────────────────────
+  const callSessionId = callData?.callSessionId;
+
   useEffect(() => {
-    if (!socket || !callData) return;
+    if (!socket || !callSessionId) return;
+
+    let cancelled = false;
+    mediaStoppedRef.current = false; // ← resetear la guarda
+    const pendingCandidates: any[] = [];
 
     const initWebRTC = async () => {
       const pc = new RTCPeerConnection(ICE_SERVERS);
       pcRef.current = pc;
+
+      pc.ontrack = (event: any) => {
+        if (event.streams && event.streams[0])
+          setRemoteStream(event.streams[0]);
+      };
+      pc.onicecandidate = (event: any) => {
+        if (event.candidate) {
+          socket.emit("webrtc_ice_candidate", {
+            callSessionId,
+            candidate: event.candidate,
+          });
+        }
+      };
 
       try {
         const stream = await mediaDevices.getUserMedia({
           video: callData.typeCall === "video",
           audio: true,
         });
+        if (cancelled) {
+          stream.getTracks().forEach((t: any) => t.stop());
+          return;
+        }
         localStreamRef.current = stream;
         setLocalStream(stream);
-
-        stream.getTracks().forEach((track: any) => {
-          pc.addTrack(track, stream);
-        });
+        stream.getTracks().forEach((track: any) => pc.addTrack(track, stream));
       } catch (e) {
         console.log("⚠️ Error obteniendo cámara:", e);
+        if (cancelled) return;
         try {
           const audioStream = await mediaDevices.getUserMedia({
             video: false,
             audio: true,
           });
+          if (cancelled) {
+            audioStream.getTracks().forEach((t: any) => t.stop());
+            return;
+          }
           localStreamRef.current = audioStream;
-          audioStream.getTracks().forEach((track: any) => {
-            pc.addTrack(track, audioStream);
-          });
+          audioStream
+            .getTracks()
+            .forEach((t: any) => pc.addTrack(t, audioStream));
         } catch (audioErr) {
           console.log("❌ Sin audio tampoco:", audioErr);
         }
       }
 
-      pc.ontrack = (event: any) => {
-        console.log("🎥 Stream remoto recibido");
-        if (event.streams && event.streams[0]) {
-          setRemoteStream(event.streams[0]);
-        }
-      };
-
-      pc.onicecandidate = (event: any) => {
-        if (event.candidate) {
-          socket.emit("webrtc_ice_candidate", {
-            callSessionId: callData.callSessionId,
-            candidate: event.candidate,
-          });
-        }
-      };
-
+      if (cancelled) return;
       socket.emit("provider_ready", {
-        callSessionId: callData.callSessionId,
+        callSessionId,
         clientEmail: callData.clientEmail,
       });
-      console.log("📡 provider_ready emitido");
     };
 
     initWebRTC();
 
     const handleOffer = async (data: { sdp: any }) => {
-      if (!pcRef.current) return;
-      console.log("📨 webrtc_offer recibido");
-      await pcRef.current.setRemoteDescription(
-        new RTCSessionDescription(data.sdp),
-      );
-      const answer = await pcRef.current.createAnswer();
-      await pcRef.current.setLocalDescription(answer);
-      socket.emit("webrtc_answer", {
-        callSessionId: callData.callSessionId,
-        sdp: answer,
-      });
+      const pc = pcRef.current;
+      if (!pc) return;
+      await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      for (const c of pendingCandidates.splice(0)) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(c));
+        } catch {}
+      }
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit("webrtc_answer", { callSessionId, sdp: answer });
     };
 
     const handleIce = async (data: { candidate: any }) => {
-      if (!pcRef.current) return;
+      const pc = pcRef.current;
+      if (!pc) return;
+      if (!pc.remoteDescription) {
+        pendingCandidates.push(data.candidate); // llegó antes que la oferta
+        return;
+      }
       try {
-        await pcRef.current.addIceCandidate(
-          new RTCIceCandidate(data.candidate),
-        );
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
       } catch (e) {
         console.log("Error ICE:", e);
       }
@@ -243,11 +255,12 @@ export default function IncomingCallScreen({
     socket.on("webrtc_ice_candidate", handleIce);
 
     return () => {
+      cancelled = true;
       socket.off("webrtc_offer", handleOffer);
       socket.off("webrtc_ice_candidate", handleIce);
-      stopMedia(); // 👈 limpieza segura al desmontar
+      stopMedia();
     };
-  }, [socket, callData]);
+  }, [socket, callSessionId]);
 
   // ─────────────────────────────────────────────
   // TIMER via call_tick

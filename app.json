@@ -16,7 +16,8 @@
       "package": "com.callsvideo.provider",
       "googleServicesFile": "./google-services.json",
       "permissions": [
-        "NOTIFICATIONS",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.USE_FULL_SCREEN_INTENT",
         "VIBRATE",
         "RECEIVE_BOOT_COMPLETED",
         "CAMERA",
@@ -39,9 +40,9 @@
         {
           "icon": "./assets/icon.png",
           "color": "#4f8ef7",
-          "defaultChannel": "llamadas_v3",
+          "defaultChannel": "incoming_calls_v2",
           "sounds": [
-            "./assets/sound.mp3"
+            "./assets/call_ring.wav"
           ]
         }
       ],
