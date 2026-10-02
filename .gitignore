@@ -7,3 +7,8 @@ dist/
 android/app/debug/
 android/app/release/*.apk
 !.github/
+
+# Nativo generado (EAS lo crea en la nube)
+android/
+
+android/

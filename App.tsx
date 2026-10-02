@@ -45,7 +45,7 @@ export default function App() {
           await Notifications.setNotificationChannelAsync("incoming_calls", {
             name: "Llamadas Entrantes",
             importance: Notifications.AndroidImportance.MAX,
-            sound: "default",
+            sound: "sound.mp3",
             enableVibrate: true,
             vibrationPattern: [0, 500, 200, 500, 200, 500],
             enableLights: true,
@@ -199,7 +199,7 @@ export default function App() {
         await Notifications.setNotificationChannelAsync("incoming_calls", {
           name: "Llamadas Entrantes",
           importance: Notifications.AndroidImportance.MAX,
-          sound: "default",
+          sound: "sound.mp3",
           enableVibrate: true,
           vibrationPattern: [0, 500, 200, 500, 200, 500],
           enableLights: true,
