@@ -28,6 +28,33 @@ Notifications.setNotificationHandler({
   }),
 });
 
+const ensureCallChannel = async () => {
+  if (Platform.OS !== "android") return;
+  try {
+    // Los canales son inmutables: si existe con config vieja, se borra y recrea
+    const existing = await Notifications.getNotificationChannelsAsync();
+    if (existing.some((c) => c.id === "incoming_calls")) {
+      await Notifications.deleteNotificationChannelAsync("incoming_calls");
+      console.log("🗑️ Canal viejo eliminado");
+    }
+    await Notifications.setNotificationChannelAsync("incoming_calls", {
+      name: "Llamadas Entrantes",
+      importance: Notifications.AndroidImportance.MAX,
+      sound: "sound", // ← SIN .mp3 (regla de recursos Android)
+      enableVibrate: true,
+      vibrationPattern: [0, 500, 200, 500, 200, 500],
+      enableLights: true,
+      lightColor: "#4f8ef7",
+      bypassDnd: true,
+      visibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    });
+    console.log("📢 Canal incoming_calls creado con sonido");
+  } catch (e) {
+    console.log("❌ Error creando canal:", e);
+  }
+};
+
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [providerEmail, setProviderEmail] = useState<string | null>(null);
@@ -39,32 +66,10 @@ export default function App() {
 
   // 📢 CREAR CANAL SIEMPRE AL ABRIR LA APP
   useEffect(() => {
-    const setupChannel = async () => {
-      try {
-        if (Platform.OS === "android") {
-          await Notifications.setNotificationChannelAsync("incoming_calls", {
-            name: "Llamadas Entrantes",
-            importance: Notifications.AndroidImportance.MAX,
-            sound: "sound.mp3",
-            enableVibrate: true,
-            vibrationPattern: [0, 500, 200, 500, 200, 500],
-            enableLights: true,
-            lightColor: "#4f8ef7",
-            bypassDnd: true,
-            lockscreenVisibility:
-              Notifications.AndroidNotificationVisibility.PUBLIC,
-          });
-          const channels = await Notifications.getNotificationChannelsAsync();
-          console.log(
-            "📢 Canales existentes:",
-            channels.map((c) => c.id),
-          );
-        }
-      } catch (e) {
-        console.log("❌ Error creando canal:", e);
-      }
+    const init = async () => {
+      await ensureCallChannel();
     };
-    setupChannel();
+    init();
   }, []);
 
   // ─────────────────────────────────────────────
@@ -178,6 +183,7 @@ export default function App() {
   // ─────────────────────────────────────────────
   // Registrar push notifications
   // ─────────────────────────────────────────────
+
   useEffect(() => {
     if (!isLoggedIn || !providerEmail) return;
 
@@ -194,22 +200,6 @@ export default function App() {
       }
 
       if (finalStatus !== "granted") return;
-
-      if (Platform.OS === "android") {
-        await Notifications.setNotificationChannelAsync("incoming_calls", {
-          name: "Llamadas Entrantes",
-          importance: Notifications.AndroidImportance.MAX,
-          sound: "sound.mp3",
-          enableVibrate: true,
-          vibrationPattern: [0, 500, 200, 500, 200, 500],
-          enableLights: true,
-          lightColor: "#4f8ef7",
-          bypassDnd: true,
-          lockscreenVisibility:
-            Notifications.AndroidNotificationVisibility.PUBLIC,
-        });
-        console.log("✅ Canal incoming_calls creado");
-      }
 
       try {
         const tokenData = await Notifications.getExpoPushTokenAsync({
