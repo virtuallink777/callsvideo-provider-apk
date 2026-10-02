@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Socket } from "socket.io-client";
 import { stopRingtone } from "../services/ringtone";
+import { mediaDevices } from "react-native-webrtc";
 
 interface DashboardScreenProps {
   providerEmail: string;
@@ -33,6 +34,33 @@ export default function DashboardScreen({
   socket,
 }: DashboardScreenProps) {
   const [profileData, setProfileData] = useState<any>(null);
+
+  // ═══════════════════════════════════════════════════════════
+  // 🔐 PRE-CARGA DE PERMISOS (cámara + micrófono)
+  // Al pedirlos al montar el dashboard, las llamadas siguientes
+  // no pierden tiempo en prompts y el stream se obtiene al instante.
+  // ═══════════════════════════════════════════════════════════
+  useEffect(() => {
+    const requestMediaPermissions = async () => {
+      try {
+        // Cámara
+        const cam = await mediaDevices.getUserMedia({ video: true });
+        cam.getTracks().forEach((t) => t.stop()); // libera la cámara inmediatamente
+        console.log("📸 Permiso de cámara concedido");
+      } catch (e) {
+        console.warn("⚠️ Permiso de cámara denegado:", e);
+      }
+      try {
+        // Micrófono
+        const mic = await mediaDevices.getUserMedia({ audio: true });
+        mic.getTracks().forEach((t) => t.stop()); // libera el mic inmediatamente
+        console.log("🎤 Permiso de micrófono concedido");
+      } catch (e) {
+        console.warn("⚠️ Permiso de micrófono denegado:", e);
+      }
+    };
+    requestMediaPermissions();
+  }, []); // solo al montar
 
   // Cargar perfil
   useEffect(() => {
